@@ -1,0 +1,24 @@
+{
+    "version": "1.2.0",
+    "name": "com.hiliaox.weibo",
+    "cordova_name": "Weibo",
+    "description": "weibo plugin for cordova",
+    "platforms": [
+        "android"
+    ],
+    "repository": {
+	    "type": "git",
+	    "url": "https://github.com/BelinChung/cordova-plugin-weibo"
+	},
+  	"keywords": [
+  		"cordova",
+  		"weibo",
+  		"sdk"
+  	],
+    "engines": [{
+      "name": "cordova",
+      "version": ">=3.1.0"
+    }],
+  	"author": "BelinChung",
+  	"license": "MIT"
+}
