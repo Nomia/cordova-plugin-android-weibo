@@ -18,8 +18,12 @@ import android.util.Log;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 
+import  android.media.ThumbnailUtils;
+
 import com.sina.weibo.sdk.api.ImageObject;
 import com.sina.weibo.sdk.api.TextObject;
+import com.sina.weibo.sdk.api.VideoObject;
+import com.sina.weibo.sdk.api.WebpageObject;
 import com.sina.weibo.sdk.api.WeiboMultiMessage;
 import com.sina.weibo.sdk.api.share.IWeiboShareAPI;
 import com.sina.weibo.sdk.api.share.SendMultiMessageToWeiboRequest;
@@ -30,6 +34,8 @@ import com.sina.weibo.sdk.auth.Oauth2AccessToken;
 import com.sina.weibo.sdk.auth.WeiboAuthListener;
 import com.sina.weibo.sdk.auth.sso.SsoHandler;
 import com.sina.weibo.sdk.exception.WeiboException;
+
+import com.sina.weibo.sdk.utils.Utility;
 
 public class Weibo extends CordovaPlugin {
 
@@ -50,6 +56,7 @@ public class Weibo extends CordovaPlugin {
     public boolean execute(String action, final JSONArray args,
             final CallbackContext context) throws JSONException {
         boolean result = false;
+        Activity activity = this.cordova.getActivity();
         try {
             if (action.equals("init")) {
                 this.init(args, context);
@@ -64,25 +71,36 @@ public class Weibo extends CordovaPlugin {
                 final Weibo me = this;
                 cordova.getThreadPool().execute(new Runnable() {
                     public void run() {
-                    	try {
-							JSONObject cfg = args.getJSONObject(0);
-							if (cfg.getString("type").equals("text")) {
-								me.sendText(cfg.getString("text"));
-							} else if (cfg.getString("type").equals("image")) {
-								me.sendImage(cfg.getString("data"),
-										cfg.getString("text"));
-							}
-						} catch (MalformedURLException e) {
-							context.error("JSON Exception");
-							e.printStackTrace();
-						} catch (IOException e) {
-							context.error("JSON Exception");
-							e.printStackTrace();
-						} catch (JSONException e) {
-							context.error("JSON Exception");
-							e.printStackTrace();
-						}                   
-                	}
+                        try {
+                            
+                            JSONObject cfg = args.getJSONObject(0);
+                            if (cfg.getString("type").equals("text")) {
+                                me.sendText(cfg.getString("text"),context);
+                                context.success(1);
+                            } else if (cfg.getString("type").equals("image")) {
+                                me.sendImage(cfg.getString("data"),
+                                        cfg.getString("text"),context);
+                                context.success(1);
+                            } else if (cfg.getString("type").equals("webpage")){
+                                me.sendPage(cfg.getString("page_url"),
+                                        cfg.getString("thumb_url"),
+                                        cfg.getString("title"),
+                                        cfg.getString("desc"),
+                                        cfg.getString("text"),
+                                        cfg.getString("image_url"));
+                                context.success(1);
+                            }
+                        } catch (MalformedURLException e) {
+                            context.error("JSON Exception:MalformedURLException:"+e.toString());
+                            e.printStackTrace();
+                        } catch (IOException e) {
+                            context.error("JSON Exception:IOException:"+e.toString());
+                            e.printStackTrace();
+                        } catch (JSONException e) {
+                            context.error("JSON Exception:JSONException:"+e.toString());
+                            e.printStackTrace();
+                        }                   
+                    }
                 });
                 result = true;
             }
@@ -126,7 +144,7 @@ public class Weibo extends CordovaPlugin {
         });
     }
 
-    public void sendText(String text) throws MalformedURLException, IOException {
+    public void sendText(String text,final CallbackContext context) throws MalformedURLException, IOException {
 
         mWeiboShareAPI = WeiboShareSDK.createWeiboAPI(
                 this.cordova.getActivity(), appKey);
@@ -140,10 +158,128 @@ public class Weibo extends CordovaPlugin {
         SendMultiMessageToWeiboRequest request = new SendMultiMessageToWeiboRequest();
         request.transaction = String.valueOf(System.currentTimeMillis());
         request.multiMessage = weiboMessage;
+        
+        try {
+            mWeiboShareAPI.sendRequest(this.cordova.getActivity(), request);
+        } catch (Exception e) {
+            context.error("this is the end");
+        }
+        
+    }
+
+    // me.sendPage(cfg.getString("page_url"),
+    //             cfg.getString("thumb_url"),
+    //             cfg.getString("title"),
+    //             cfg.getString("desc"),
+    //             cfg.getString("text"),
+    //             cfg.getString("image_url"));
+    public void sendPage(String url, String thumb_url,String title,String desc,String text, String image_url)
+            throws MalformedURLException, IOException{
+
+        mWeiboShareAPI = WeiboShareSDK.createWeiboAPI(
+                this.cordova.getActivity(), appKey);
+
+        mWeiboShareAPI.registerApp();
+        WeiboMultiMessage weiboMessage = new WeiboMultiMessage();
+
+        //分享的网页
+        WebpageObject mediaObject = new WebpageObject();
+        mediaObject.identify = Utility.generateGUID();
+
+        if(title != null){
+            mediaObject.title = title;
+        }else{
+
+        }
+
+        if(desc != null){
+            mediaObject.description = desc;
+        }else{
+
+        }
+
+        mediaObject.actionUrl = url;
+        final int THUMBSIZE = 64;
+        
+        //网页缩略图
+        if(thumb_url != null){
+            if (!thumb_url.startsWith("data")) {
+                Bitmap bmp = null;
+                bmp = BitmapFactory.decodeStream(new URL(thumb_url)
+                        .openStream());
+
+                Bitmap ThumbImage = ThumbnailUtils.extractThumbnail(bmp, 
+                            THUMBSIZE, THUMBSIZE);
+                bmp.recycle();
+                // 设置 Bitmap 类型的图片到对象里
+                mediaObject.setThumbImage(ThumbImage);
+            }else if(thumb_url.startsWith("data")){
+                String dataUrl = image_url;
+                String encodingPrefix = "base64,";
+                int contentStartIndex = dataUrl.indexOf(encodingPrefix)
+                        + encodingPrefix.length();
+                String resData = dataUrl.substring(contentStartIndex);
+
+                byte[] bytes = null;
+                try {
+                    bytes = Base64.decode(resData, 0);
+                } catch (Exception ignored) {
+                    Log.e("Weibo", "Invalid Base64 string");
+                }
+
+                Bitmap bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+
+                Bitmap ThumbImage = ThumbnailUtils.extractThumbnail(bmp, 
+                            THUMBSIZE, THUMBSIZE);
+                bmp.recycle();
+                // 设置 Bitmap 类型的图片到对象里
+                mediaObject.setThumbImage(ThumbImage);
+            }
+        }
+
+        mediaObject.defaultText = "网页分享默认文字";
+        weiboMessage.mediaObject = mediaObject;
+
+        //额外分享的图片
+        if (image_url != null) {
+            ImageObject imageObject = new ImageObject();
+            if (image_url.startsWith("data")) {
+                String dataUrl = image_url;
+                String encodingPrefix = "base64,";
+                int contentStartIndex = dataUrl.indexOf(encodingPrefix)
+                        + encodingPrefix.length();
+                String resData = dataUrl.substring(contentStartIndex);
+
+                byte[] bytes = null;
+                try {
+                    bytes = Base64.decode(resData, 0);
+                } catch (Exception ignored) {
+                    Log.e("Weibo", "Invalid Base64 string");
+                }
+                imageObject.imageData = bytes;
+            } else {
+                Bitmap bmp = null;
+                bmp = BitmapFactory.decodeStream(new URL(image_url)
+                        .openStream());
+                imageObject.setImageObject(bmp);
+            }
+            weiboMessage.imageObject = imageObject;
+        }
+
+        //分享的文字
+        if (text != null && text.length() > 0) {
+            TextObject textObject = new TextObject();
+            textObject.text = text;
+            weiboMessage.textObject = textObject;
+        }
+
+        SendMultiMessageToWeiboRequest request = new SendMultiMessageToWeiboRequest();
+        request.transaction = String.valueOf(System.currentTimeMillis());
+        request.multiMessage = weiboMessage;
         mWeiboShareAPI.sendRequest(this.cordova.getActivity(), request);
     }
 
-    public void sendImage(String data, String text)
+    public void sendImage(String data, String text,final CallbackContext context)
             throws MalformedURLException, IOException {
 
         String image_path = data;
